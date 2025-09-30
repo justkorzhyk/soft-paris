@@ -1,29 +1,16 @@
+// api/verify-captcha.js
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
   }
 
-  // Works for form-encoded, multipart, or JSON if your form sends JSON
-  const token =
-    req.body?.['g-recaptcha-response'] ||
-    req.body?.token ||
-    '';
-
+  const token = req.body?.['g-recaptcha-response'] || '';
   if (!token) {
     return res.status(400).json({ ok: false, error: 'Missing captcha token' });
   }
 
   const secret = process.env.RECAPTCHA_SECRET;
-  if (!secret) {
-    return res.status(500).json({ ok: false, error: 'Server misconfiguration: missing secret' });
-  }
-
-  const params = new URLSearchParams();
-  params.append('secret', secret);
-  params.append('response', token);
-  if (req.headers['x-forwarded-for']) {
-    params.append('remoteip', req.headers['x-forwarded-for'].split(',')[0]);
-  }
+  const params = new URLSearchParams({ secret, response: token });
 
   try {
     const r = await fetch('https://www.google.com/recaptcha/api/siteverify', {
@@ -34,12 +21,14 @@ export default async function handler(req, res) {
     const data = await r.json();
 
     if (!data.success) {
-      return res.status(400).json({ ok: false, error: 'Captcha verification failed', details: data['error-codes'] || [] });
+      return res.status(400).json({ ok: false, error: 'Captcha failed', details: data['error-codes'] });
     }
 
-    // ✅ Captcha ok — continue your logic (save lead, send mail, etc.)
-    return res.status(200).json({ ok: true, message: 'Captcha verified' });
+    // ✅ Captcha passed — your logic here
+    // Example: redirect
+    res.writeHead(303, { Location: '/thanks' });
+    res.end();
   } catch (err) {
-    return res.status(500).json({ ok: false, error: 'Verification request failed', details: err.message });
+    return res.status(500).json({ ok: false, error: err.message });
   }
 }
